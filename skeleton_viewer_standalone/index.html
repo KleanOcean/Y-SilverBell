@@ -1,0 +1,790 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>YOC44 3D Skeleton Viewer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #111;
+            color: #eee;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        /* ── Header ─────────────────────────────────────── */
+        #header {
+            padding: 10px 20px;
+            background: #16213e;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            border-bottom: 1px solid #0f3460;
+            flex-shrink: 0;
+        }
+        #header h1 { font-size: 16px; color: #e94560; }
+        #video-select {
+            padding: 6px 12px;
+            font-size: 13px;
+            background: #0f3460;
+            color: #eee;
+            border: 1px solid #1a4a7a;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-left: 16px;
+        }
+        #video-select:hover { background: #1a4a7a; }
+
+        /* ── Info Card ──────────────────────────────────── */
+        #info-card {
+            background: #0f3460;
+            padding: 8px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        #info-card .name {
+            font-weight: 700;
+            font-size: 18px;
+            color: #e94560;
+        }
+        #info-card .identity {
+            font-size: 13px;
+            color: #aaa;
+            margin-left: 12px;
+        }
+        .level-badge {
+            font-size: 11px;
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .level-elite { background: #ffd700; color: #000; }
+        .level-advanced { background: #4ad94a; color: #000; }
+        .level-intermediate { background: #4a90d9; color: #fff; }
+        .level-beginner { background: #d94a4a; color: #fff; }
+        .level-intentional_error { background: #9932cc; color: #fff; }
+
+        /* ── Canvas ─────────────────────────────────────── */
+        #canvas-wrapper {
+            flex: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: #111;
+            position: relative;
+            overflow: hidden;
+        }
+        #canvas-container {
+            /* Square-ish: use the smaller of width/height */
+            position: relative;
+        }
+        #camera-info {
+            position: absolute;
+            bottom: 8px;
+            left: 8px;
+            padding: 4px 10px;
+            background: rgba(0,0,0,0.6);
+            border-radius: 4px;
+            font-size: 11px;
+            font-family: monospace;
+            color: #888;
+            pointer-events: none;
+        }
+
+        /* ── Controls ───────────────────────────────────── */
+        #controls {
+            padding: 12px 20px;
+            background: #16213e;
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            border-top: 1px solid #0f3460;
+            flex-shrink: 0;
+        }
+        button {
+            padding: 8px 20px;
+            font-size: 13px;
+            font-weight: 600;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        #playBtn { background: #e94560; color: white; }
+        #playBtn:hover { background: #ff6b6b; }
+        #playBtn.playing { background: #4ad94a; }
+        #resetBtn { background: #0f3460; color: #aaa; }
+        #resetBtn:hover { background: #1a4a7a; color: #fff; }
+        .view-btn { background: #0f3460; color: #aaa; font-size: 11px; padding: 6px 12px; }
+        .view-btn:hover { background: #1a4a7a; color: #fff; }
+        .view-btn.active { background: #e94560; color: #fff; }
+        #frameSlider {
+            flex: 1;
+            height: 5px;
+            -webkit-appearance: none;
+            background: #0f3460;
+            border-radius: 3px;
+            outline: none;
+        }
+        #frameSlider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 14px; height: 14px;
+            background: #e94560;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        #frameInfo {
+            font-size: 13px;
+            font-family: monospace;
+            min-width: 160px;
+            text-align: right;
+            color: #aaa;
+        }
+        #frameInfo .impact { color: #ffd700; }
+        #loading {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 16px;
+            color: #888;
+            background: rgba(0,0,0,0.7);
+            padding: 16px 32px;
+            border-radius: 8px;
+            z-index: 10;
+        }
+        .separator { width: 1px; height: 24px; background: #0f3460; }
+    </style>
+</head>
+<body>
+    <div id="header">
+        <div style="display:flex;align-items:center;">
+            <h1>YOC44 3D Skeleton Viewer</h1>
+            <select id="video-select"></select>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">
+            <button class="view-btn active" data-view="default">Right-Front 45&deg;</button>
+            <button class="view-btn" data-view="top">Top View</button>
+            <button class="view-btn" data-view="front">Front View</button>
+            <button class="view-btn" data-view="side">Side View</button>
+        </div>
+    </div>
+    <div id="info-card">
+        <div>
+            <span class="name" id="video-name">-</span>
+            <span class="identity" id="video-identity">-</span>
+        </div>
+        <span class="level-badge" id="video-level">-</span>
+    </div>
+    <div id="canvas-wrapper">
+        <div id="canvas-container"></div>
+        <div id="camera-info"></div>
+        <div id="loading">Loading skeleton data...</div>
+    </div>
+    <div id="controls">
+        <button id="playBtn">Play</button>
+        <button id="resetBtn">Reset</button>
+        <div class="separator"></div>
+        <input type="range" id="frameSlider" min="0" max="100" value="0">
+        <div id="frameInfo">Frame: 0 / 0</div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        // ── Constants ──────────────────────────────────────────
+
+        const CONNECTIONS = [
+            [0, 1], [0, 15], [0, 16], [15, 17], [16, 18],
+            [1, 8], [1, 2], [1, 5], [2, 3], [3, 4], [5, 6], [6, 7],
+            [8, 9], [9, 10], [10, 11], [11, 22], [11, 23], [11, 24],
+            [8, 12], [12, 13], [13, 14], [14, 19], [14, 20], [14, 21],
+            [37, 1], [38, 0], [40, 1], [41, 8], [39, 8],
+            [33, 2], [32, 3], [31, 4], [34, 5], [35, 6], [36, 7],
+            [27, 9], [26, 10], [25, 11], [28, 12], [29, 13], [30, 14],
+        ];
+
+        const COLORS = {
+            head: 0x7AB8D9, rightArm: 0xD94A4A, leftArm: 0x4AD94A,
+            rightLeg: 0x4A90D9, leftLeg: 0x4A90D9,
+            rightFoot: 0xD9D94A, leftFoot: 0xD9D94A,
+            spine: 0x9EADB8, wristTrail: 0xFFD700,
+        };
+
+        const VIDEO_INFO = {
+            T01: { level: 'beginner', identity: '女性初学者' },
+            T02: { level: 'beginner', identity: '摆拍型初学者' },
+            T03: { level: 'intermediate', identity: '力量型男性' },
+            T04: { level: 'beginner', identity: '完全初学者' },
+            T05: { level: 'beginner', identity: '女性初学者' },
+            T06: { level: 'elite', identity: '费德勒' },
+            T07: { level: 'intermediate', identity: '壁球爱好者' },
+            T08: { level: 'elite', identity: '德约科维奇' },
+            T09: { level: 'intentional_error', identity: '故意后仰' },
+            T10: { level: 'advanced', identity: '学过50h' },
+            T11: { level: 'intentional_error', identity: '故意够着打' },
+            T12: { level: 'elite', identity: '辛纳' },
+            T13: { level: 'advanced', identity: '网球教练' },
+            T14: { level: 'beginner', identity: '抡大臂' },
+            T15: { level: 'beginner', identity: '上下分离' },
+            T16: { level: 'intermediate', identity: '商务人士' },
+            T21: { level: 'advanced', identity: '校队(用力)' },
+            T22: { level: 'advanced', identity: '校队最佳' },
+            T23: { level: 'intermediate', identity: '校队(矮)' },
+            T24: { level: 'intermediate', identity: '校队最弱' },
+            T25: { level: 'elite', identity: '费德勒红土' },
+            T26: { level: 'elite', identity: '费德勒左前45°' },
+            T27: { level: 'elite', identity: '费德勒正面' },
+            T28: { level: 'elite', identity: '费德勒热身' },
+            T29: { level: 'advanced', identity: '空挥拍' },
+            T30: { level: 'beginner', identity: '完全初学者' },
+            T31: { level: 'beginner', identity: '高尔夫背景' },
+        };
+
+        const DATA_FILES = [
+            'skeleton_data.json',
+        ];
+
+        const CAMERA_PRESETS = {
+            default: { pos: [0.18, 1.47, 3.72], target: [0, 0.2, 0] },   // Right-Front 45°: 45° CW from front
+            top:     { pos: [0, 4.5, 0.01],     target: [0, 0, 0] },      // Top-down
+            front:   { pos: [2.75, 1.47, 2.50],  target: [0, 0.2, 0] },   // Front view (T15 reference)
+            side:    { pos: [2.50, 1.47, -2.75], target: [0, 0.2, 0] },   // Left→Right (person's left side)
+        };
+
+        // ── Joint color helpers ────────────────────────────────
+
+        function getJointColor(idx) {
+            if ([0, 15, 16, 17, 18, 37, 38, 42, 43].includes(idx)) return COLORS.head;
+            if ([2, 3, 4, 31, 32, 33].includes(idx)) return COLORS.rightArm;
+            if ([5, 6, 7, 34, 35, 36].includes(idx)) return COLORS.leftArm;
+            if ([9, 10, 11, 25, 26, 27].includes(idx)) return COLORS.rightLeg;
+            if ([12, 13, 14, 28, 29, 30].includes(idx)) return COLORS.leftLeg;
+            if ([22, 23, 24].includes(idx)) return COLORS.rightFoot;
+            if ([19, 20, 21].includes(idx)) return COLORS.leftFoot;
+            return COLORS.spine;
+        }
+
+        // ── Main Viewer ────────────────────────────────────────
+
+        class SkeletonViewer {
+            constructor() {
+                this.allData = {};      // { T01: {frames, impact_frame, pose_3d}, ... }
+                this.currentVideo = null;
+                this.normalizedFrames = null;
+                this.floorY = -1;
+                this.currentFrame = 0;
+                this.isPlaying = false;
+                this.lastTime = 0;
+                this.frameInterval = 1000 / 30;
+
+                this.joints = [];
+                this.bones = [];
+                this.wristTrailPoints = [];
+                this.wristTrailMesh = null;
+                this.wristTrailGlow = null;
+
+                this.gridGroup = null;
+                this.axesGroup = null;
+
+                this.init();
+            }
+
+            async init() {
+                await this.loadAllData();
+                this.setupScene();
+                this.setupControls();
+                this.createFloorAndAxes();
+                this.createSkeleton();
+
+                // Pick initial video (T06 Federer if available, else first)
+                const initial = this.allData['T15'] ? 'T15' : Object.keys(this.allData)[0];
+                this.switchVideo(initial);
+
+                document.getElementById('loading').style.display = 'none';
+                this.animate();
+            }
+
+            async loadAllData() {
+                for (const file of DATA_FILES) {
+                    try {
+                        const resp = await fetch(file);
+                        if (resp.ok) {
+                            const data = await resp.json();
+                            Object.assign(this.allData, data);
+                        }
+                    } catch (e) {
+                        console.warn(`Failed to load ${file}`);
+                    }
+                }
+
+                // Populate dropdown
+                const select = document.getElementById('video-select');
+                const sortedNames = Object.keys(this.allData).sort((a, b) => {
+                    const na = parseInt(a.replace(/\D/g, ''));
+                    const nb = parseInt(b.replace(/\D/g, ''));
+                    return na - nb;
+                });
+                for (const name of sortedNames) {
+                    const info = VIDEO_INFO[name] || {};
+                    const opt = document.createElement('option');
+                    opt.value = name;
+                    opt.textContent = `${name} - ${info.identity || ''}`;
+                    select.appendChild(opt);
+                }
+            }
+
+            normalizeData(frames) {
+                let minX = Infinity, maxX = -Infinity;
+                let minY = Infinity, maxY = -Infinity;
+                let minZ = Infinity, maxZ = -Infinity;
+                for (const frame of frames) {
+                    for (const [x, y, z] of frame) {
+                        minX = Math.min(minX, x); maxX = Math.max(maxX, x);
+                        minY = Math.min(minY, y); maxY = Math.max(maxY, y);
+                        minZ = Math.min(minZ, z); maxZ = Math.max(maxZ, z);
+                    }
+                }
+                const maxRange = Math.max(maxX - minX, maxY - minY, maxZ - minZ);
+                const yUp = frames[0][0][1] > frames[0][8][1]; // nose vs hip
+                const normalized = frames.map(frame =>
+                    frame.map(([x, y, z]) => [
+                        ((x - minX) / maxRange - 0.5) * 2,
+                        ((y - minY) / maxRange - 0.5) * 2 * (yUp ? 1 : -1),
+                        ((z - minZ) / maxRange - 0.5) * 2
+                    ])
+                );
+                // Compute floor Y
+                let floorY = Infinity;
+                for (const frame of normalized) {
+                    for (const [, y] of frame) {
+                        if (y < floorY) floorY = y;
+                    }
+                }
+                this.floorY = floorY;
+                return normalized;
+            }
+
+            switchVideo(name) {
+                const data = this.allData[name];
+                if (!data) return;
+
+                this.currentVideo = name;
+                this.normalizedFrames = this.normalizeData(data.pose_3d);
+
+                // Update info card
+                const info = VIDEO_INFO[name] || { level: '', identity: '' };
+                document.getElementById('video-name').textContent = name;
+                document.getElementById('video-identity').textContent = info.identity;
+                const badge = document.getElementById('video-level');
+                badge.textContent = info.level || 'unknown';
+                badge.className = `level-badge level-${info.level || 'unknown'}`;
+
+                // Update slider
+                document.getElementById('frameSlider').max = data.frames - 1;
+                document.getElementById('video-select').value = name;
+
+                // Update floor grid position
+                this.updateFloorPosition();
+
+                // Reset trail
+                this.wristTrailPoints = [];
+                this.clearTrailMeshes();
+
+                this.updateFrame(0);
+            }
+
+            setupScene() {
+                const wrapper = document.getElementById('canvas-wrapper');
+                const container = document.getElementById('canvas-container');
+
+                // Compute square-ish size
+                const size = Math.min(wrapper.clientWidth, wrapper.clientHeight);
+                const w = Math.min(wrapper.clientWidth, size * 1.15); // slightly wider than tall
+                const h = size;
+                container.style.width = w + 'px';
+                container.style.height = h + 'px';
+
+                this.scene = new THREE.Scene();
+                this.scene.background = new THREE.Color(0x1a1a2e);
+
+                this.camera = new THREE.PerspectiveCamera(45, w / h, 0.1, 100);
+                this.camera.position.set(...CAMERA_PRESETS.default.pos);
+
+                this.renderer = new THREE.WebGLRenderer({ antialias: true });
+                this.renderer.setSize(w, h);
+                this.renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+                this.renderer.shadowMap.enabled = true;
+                container.appendChild(this.renderer.domElement);
+
+                // Lighting
+                const ambient = new THREE.AmbientLight(0xffffff, 0.35);
+                this.scene.add(ambient);
+
+                // Hemisphere light - sky/ground ambient
+                const hemi = new THREE.HemisphereLight(0xccddff, 0x1a1a2e, 0.4);
+                this.scene.add(hemi);
+
+                // Key light from above-right
+                const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+                dirLight.position.set(2, 6, 2);
+                dirLight.castShadow = true;
+                dirLight.shadow.mapSize.set(1024, 1024);
+                dirLight.shadow.camera.near = 0.5;
+                dirLight.shadow.camera.far = 15;
+                dirLight.shadow.camera.left = -3;
+                dirLight.shadow.camera.right = 3;
+                dirLight.shadow.camera.top = 3;
+                dirLight.shadow.camera.bottom = -3;
+                this.scene.add(dirLight);
+
+                // Spot light - "stage light" shining down on the person
+                const spotLight = new THREE.SpotLight(0xffeedd, 1.2, 10, Math.PI / 5, 0.5, 1.5);
+                spotLight.position.set(0, 5, 0);
+                spotLight.target.position.set(0, 0, 0);
+                spotLight.castShadow = true;
+                this.scene.add(spotLight);
+                this.scene.add(spotLight.target);
+
+                // Fill light from behind-left
+                const fillLight = new THREE.DirectionalLight(0x6688cc, 0.25);
+                fillLight.position.set(-3, 2, -2);
+                this.scene.add(fillLight);
+
+                // Controls
+                this.controls = new OrbitControls(this.camera, this.renderer.domElement);
+                this.controls.enableDamping = true;
+                this.controls.dampingFactor = 0.08;
+                this.controls.minDistance = 1.5;
+                this.controls.maxDistance = 8;
+                this.controls.target.set(...CAMERA_PRESETS.default.target);
+
+                // Resize
+                window.addEventListener('resize', () => {
+                    const sz = Math.min(wrapper.clientWidth, wrapper.clientHeight);
+                    const nw = Math.min(wrapper.clientWidth, sz * 1.15);
+                    const nh = sz;
+                    container.style.width = nw + 'px';
+                    container.style.height = nh + 'px';
+                    this.camera.aspect = nw / nh;
+                    this.camera.updateProjectionMatrix();
+                    this.renderer.setSize(nw, nh);
+                });
+            }
+
+            createFloorAndAxes() {
+                // ── Floor Grid ──
+                this.gridGroup = new THREE.Group();
+
+                const gridSize = 2.4;
+                const gridDivisions = 24;
+                const gridHelper = new THREE.GridHelper(gridSize, gridDivisions, 0x2a3a5e, 0x1e2538);
+                gridHelper.material.opacity = 0.5;
+                gridHelper.material.transparent = true;
+                this.gridGroup.add(gridHelper);
+
+                // Shadow-receiving ground plane (invisible but catches shadows)
+                const groundGeo = new THREE.PlaneGeometry(gridSize, gridSize);
+                const groundMat = new THREE.ShadowMaterial({ opacity: 0.3 });
+                const ground = new THREE.Mesh(groundGeo, groundMat);
+                ground.rotation.x = -Math.PI / 2;
+                ground.receiveShadow = true;
+                this.gridGroup.add(ground);
+
+                this.scene.add(this.gridGroup);
+
+                // ── 3D Axes (behind person, far corner from default camera) ──
+                // Data orientation: video filmed from right-front 45°
+                // Person faces roughly toward (-X, +Z) in normalized coords
+                // Camera default at (+X, +Y, +Z) → "behind person" = (-X, -Z) corner
+                this.axesGroup = new THREE.Group();
+                const axisLen = 0.45;
+                const axisRadius = 0.005;
+                const coneLen = 0.055;
+                const coneRad = 0.018;
+
+                const makeAxis = (dir, color) => {
+                    const shaftGeo = new THREE.CylinderGeometry(axisRadius, axisRadius, axisLen, 8);
+                    const mat = new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.5 });
+                    const shaft = new THREE.Mesh(shaftGeo, mat);
+                    const coneGeo = new THREE.ConeGeometry(coneRad, coneLen, 8);
+                    const cone = new THREE.Mesh(coneGeo, mat);
+
+                    const group = new THREE.Group();
+                    shaft.position.y = axisLen / 2;
+                    cone.position.y = axisLen + coneLen / 2;
+                    group.add(shaft);
+                    group.add(cone);
+
+                    if (dir === 'x') group.rotation.z = -Math.PI / 2;
+                    else if (dir === 'z') group.rotation.x = Math.PI / 2;
+                    return group;
+                };
+
+                const makeLabel = (text, position, color) => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = 64; canvas.height = 64;
+                    const ctx = canvas.getContext('2d');
+                    ctx.font = 'bold 36px sans-serif';
+                    ctx.fillStyle = color;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText(text, 32, 32);
+                    const texture = new THREE.CanvasTexture(canvas);
+                    const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true });
+                    const sprite = new THREE.Sprite(spriteMat);
+                    sprite.position.copy(position);
+                    sprite.scale.set(0.1, 0.1, 0.1);
+                    return sprite;
+                };
+
+                this.axesGroup.add(makeAxis('x', 0xcc4444));
+                this.axesGroup.add(makeAxis('y', 0x44cc44));
+                this.axesGroup.add(makeAxis('z', 0x4444cc));
+
+                this.axesGroup.add(makeLabel('X', new THREE.Vector3(axisLen + 0.08, 0, 0), '#cc4444'));
+                this.axesGroup.add(makeLabel('Y', new THREE.Vector3(0, axisLen + 0.08, 0), '#44cc44'));
+                this.axesGroup.add(makeLabel('Z', new THREE.Vector3(0, 0, axisLen + 0.08), '#4444cc'));
+
+                // Behind person: (-X, -Z) corner, away from default camera at (+X, +Z)
+                this.axesGroup.position.set(-1.05, 0, -1.05);
+
+                this.scene.add(this.axesGroup);
+            }
+
+            updateFloorPosition() {
+                if (this.gridGroup) {
+                    this.gridGroup.position.y = this.floorY;
+                    this.axesGroup.position.y = this.floorY;
+                }
+            }
+
+            createSkeleton() {
+                const jointGeom = new THREE.SphereGeometry(0.045, 16, 16);
+                for (let i = 0; i < 44; i++) {
+                    const color = getJointColor(i);
+                    const mat = new THREE.MeshStandardMaterial({
+                        color, emissive: color, emissiveIntensity: 0.2,
+                        roughness: 0.4, metalness: 0.1
+                    });
+                    const sphere = new THREE.Mesh(jointGeom, mat);
+                    sphere.castShadow = true;
+                    if ([0, 38, 43].includes(i)) sphere.scale.setScalar(1.5);
+                    if ([4, 7].includes(i)) sphere.scale.setScalar(1.2);
+                    this.joints.push(sphere);
+                    this.scene.add(sphere);
+                }
+                for (const [j1, j2] of CONNECTIONS) {
+                    const color = getJointColor(j2);
+                    const mat = new THREE.MeshStandardMaterial({
+                        color, emissive: color, emissiveIntensity: 0.15,
+                        roughness: 0.4, metalness: 0.1
+                    });
+                    this.bones.push({ j1, j2, material: mat, mesh: null });
+                }
+            }
+
+            updateFrame(frameIdx) {
+                if (!this.normalizedFrames) return;
+                this.currentFrame = frameIdx;
+                const frame = this.normalizedFrames[Math.min(frameIdx, this.normalizedFrames.length - 1)];
+
+                // Update joints
+                for (let i = 0; i < 44; i++) {
+                    this.joints[i].position.set(...frame[i]);
+                }
+
+                // Update bones
+                for (const bone of this.bones) {
+                    if (bone.mesh) {
+                        this.scene.remove(bone.mesh);
+                        bone.mesh.geometry.dispose();
+                    }
+                    const p1 = new THREE.Vector3(...frame[bone.j1]);
+                    const p2 = new THREE.Vector3(...frame[bone.j2]);
+                    const curve = new THREE.LineCurve3(p1, p2);
+                    bone.mesh = new THREE.Mesh(
+                        new THREE.TubeGeometry(curve, 1, 0.03, 8, false),
+                        bone.material
+                    );
+                    bone.mesh.castShadow = true;
+                    this.scene.add(bone.mesh);
+                }
+
+                // Wrist trail
+                this.updateWristTrail(frameIdx, frame);
+
+                // UI
+                document.getElementById('frameSlider').value = frameIdx;
+                const data = this.allData[this.currentVideo];
+                const impact = data ? data.impact_frame : 0;
+                const total = data ? data.frames - 1 : 0;
+                const nearImpact = Math.abs(frameIdx - impact) <= 20;
+                document.getElementById('frameInfo').innerHTML =
+                    `Frame: ${frameIdx} / ${total} ` +
+                    (nearImpact ? `<span class="impact">[Impact: ${impact}]</span>` : '');
+            }
+
+            updateWristTrail(frameIdx, frame) {
+                const data = this.allData[this.currentVideo];
+                if (!data) return;
+                const impact = data.impact_frame;
+                const trailStart = impact - 20;
+                const trailEnd = impact + 20;
+
+                // Right wrist (index 4)
+                const wristPos = new THREE.Vector3(...frame[4]);
+
+                // Accumulate points as frames sweep through impact window
+                if (frameIdx >= trailStart && frameIdx <= trailEnd) {
+                    this.wristTrailPoints.push(wristPos.clone());
+                }
+                // Clear trail outside the window
+                if (frameIdx > trailEnd || frameIdx < trailStart - 5) {
+                    this.wristTrailPoints = [];
+                }
+
+                this.clearTrailMeshes();
+
+                if (this.wristTrailPoints.length >= 2) {
+                    const curve = new THREE.CatmullRomCurve3(this.wristTrailPoints);
+                    const segments = Math.max(this.wristTrailPoints.length * 3, 12);
+
+                    // Main trail - solid opaque gold (no transparency)
+                    const trailGeo = new THREE.TubeGeometry(curve, segments, 0.025, 8, false);
+                    const trailMat = new THREE.MeshBasicMaterial({ color: COLORS.wristTrail });
+                    this.wristTrailMesh = new THREE.Mesh(trailGeo, trailMat);
+                    this.scene.add(this.wristTrailMesh);
+
+                    // Glow - also solid, slight transparency only for glow
+                    const glowGeo = new THREE.TubeGeometry(curve, segments, 0.04, 8, false);
+                    const glowMat = new THREE.MeshBasicMaterial({
+                        color: COLORS.wristTrail, transparent: true, opacity: 0.25
+                    });
+                    this.wristTrailGlow = new THREE.Mesh(glowGeo, glowMat);
+                    this.scene.add(this.wristTrailGlow);
+                }
+            }
+
+            clearTrailMeshes() {
+                if (this.wristTrailMesh) {
+                    this.scene.remove(this.wristTrailMesh);
+                    this.wristTrailMesh.geometry.dispose();
+                    this.wristTrailMesh = null;
+                }
+                if (this.wristTrailGlow) {
+                    this.scene.remove(this.wristTrailGlow);
+                    this.wristTrailGlow.geometry.dispose();
+                    this.wristTrailGlow = null;
+                }
+            }
+
+            setupControls() {
+                document.getElementById('playBtn').addEventListener('click', () => this.togglePlay());
+                document.getElementById('resetBtn').addEventListener('click', () => this.setCameraPreset('default'));
+                document.getElementById('frameSlider').addEventListener('input', (e) => {
+                    this.updateFrame(parseInt(e.target.value));
+                    if (this.isPlaying) this.togglePlay();
+                });
+
+                document.getElementById('video-select').addEventListener('change', (e) => {
+                    this.switchVideo(e.target.value);
+                });
+
+                // View preset buttons
+                document.querySelectorAll('.view-btn').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const view = btn.dataset.view;
+                        this.setCameraPreset(view);
+                        document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+                        btn.classList.add('active');
+                    });
+                });
+
+                // Keyboard shortcuts
+                window.addEventListener('keydown', (e) => {
+                    if (e.code === 'Space') { e.preventDefault(); this.togglePlay(); }
+                    if (e.code === 'ArrowRight') this.updateFrame(Math.min(this.currentFrame + 1, this.normalizedFrames.length - 1));
+                    if (e.code === 'ArrowLeft') this.updateFrame(Math.max(this.currentFrame - 1, 0));
+                });
+            }
+
+            setCameraPreset(name) {
+                const preset = CAMERA_PRESETS[name];
+                if (!preset) return;
+
+                // Smooth transition
+                const startPos = this.camera.position.clone();
+                const endPos = new THREE.Vector3(...preset.pos);
+                const startTarget = this.controls.target.clone();
+                const endTarget = new THREE.Vector3(...preset.target);
+                const duration = 600;
+                const startTime = performance.now();
+
+                const animateTransition = () => {
+                    const elapsed = performance.now() - startTime;
+                    const t = Math.min(elapsed / duration, 1);
+                    const ease = t * t * (3 - 2 * t); // smoothstep
+
+                    this.camera.position.lerpVectors(startPos, endPos, ease);
+                    this.controls.target.lerpVectors(startTarget, endTarget, ease);
+                    this.controls.update();
+
+                    if (t < 1) requestAnimationFrame(animateTransition);
+                };
+                animateTransition();
+            }
+
+            togglePlay() {
+                this.isPlaying = !this.isPlaying;
+                const btn = document.getElementById('playBtn');
+                btn.textContent = this.isPlaying ? 'Pause' : 'Play';
+                btn.classList.toggle('playing', this.isPlaying);
+            }
+
+            animate() {
+                requestAnimationFrame(() => this.animate());
+                const now = performance.now();
+
+                if (this.isPlaying && this.normalizedFrames && now - this.lastTime >= this.frameInterval) {
+                    this.lastTime = now;
+                    let next = this.currentFrame + 1;
+                    const data = this.allData[this.currentVideo];
+                    if (next >= (data ? data.frames : 1)) {
+                        next = 0;
+                    }
+                    this.updateFrame(next);
+                }
+
+                // Camera info
+                const p = this.camera.position;
+                const t = this.controls.target;
+                document.getElementById('camera-info').textContent =
+                    `cam: [${p.x.toFixed(2)}, ${p.y.toFixed(2)}, ${p.z.toFixed(2)}]  target: [${t.x.toFixed(2)}, ${t.y.toFixed(2)}, ${t.z.toFixed(2)}]`;
+
+                this.controls.update();
+                this.renderer.render(this.scene, this.camera);
+            }
+        }
+
+        new SkeletonViewer();
+    </script>
+</body>
+</html>

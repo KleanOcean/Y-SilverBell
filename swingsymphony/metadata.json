@@ -1,0 +1,8 @@
+{
+  "name": "SwingSymphony",
+  "description": "Convert your tennis swing biomechanics into auditory rhythm. Hear your motion.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

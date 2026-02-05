@@ -3,7 +3,8 @@ import { SwingData } from '../types';
 import { RhythmVisualizer } from './RhythmVisualizer';
 import { PoseOverlay } from './PoseOverlay';
 import { Skeleton3DViewer } from './Skeleton3DViewer';
-import { Play, Pause, RefreshCw, BarChart2, Volume2, ShieldAlert, Box } from 'lucide-react';
+import { Play, Pause, RefreshCw, BarChart2, Volume2, VolumeX, ShieldAlert, Box } from 'lucide-react';
+import { audioService } from '../services/audioService';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 
 interface Props {
@@ -17,11 +18,18 @@ export const Studio: React.FC<Props> = ({ data, onRestart, onBattle }) => {
   const [currentTime, setCurrentTime] = useState(0);
   const [speed, setSpeed] = useState(1);
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('3d');
+  const [audioEnabled, setAudioEnabled] = useState(true);
   const requestRef = useRef<number>();
   const startTimeRef = useRef<number>();
 
   const togglePlay = () => {
     setIsPlaying(!isPlaying);
+  };
+
+  const toggleAudio = () => {
+    const newState = !audioEnabled;
+    setAudioEnabled(newState);
+    audioService.setVolume(newState ? 0.3 : 0);
   };
 
   const animate = (time: number) => {
@@ -175,6 +183,14 @@ export const Studio: React.FC<Props> = ({ data, onRestart, onBattle }) => {
                   {isPlaying ? <Pause size={20} /> : <Play size={20} />}
                 </button>
                 <div className="h-4 w-[1px] bg-surface-700 mx-1"></div>
+                <button
+                  onClick={toggleAudio}
+                  className={`p-2 transition ${audioEnabled ? 'text-neon-blue hover:text-neon-green' : 'text-slate-600 hover:text-slate-400'}`}
+                  title={audioEnabled ? 'Mute Audio' : 'Enable Audio'}
+                >
+                  {audioEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+                </button>
+                <div className="h-4 w-[1px] bg-surface-700 mx-1"></div>
                 <select 
                   className="bg-transparent text-xs font-mono outline-none text-slate-400"
                   value={speed}
@@ -202,11 +218,11 @@ export const Studio: React.FC<Props> = ({ data, onRestart, onBattle }) => {
         <div className="flex-1 grid grid-cols-2 gap-1">
             
             {/* Smoothness/Jerk Graph */}
-            <div className="bg-surface-800 rounded-lg p-4 border border-surface-700 relative">
+            <div className="bg-surface-800 rounded-lg p-4 border border-surface-700 relative flex flex-col">
                <h3 className="text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-2">
                  <BarChart2 size={14} /> Motion Smoothness (Inv. Jerk)
                </h3>
-               <div className="h-32 w-full">
+               <div className="flex-1 w-full flex items-center">
                  <ResponsiveContainer width="100%" height="100%">
                    <LineChart data={data.velocityData}>
                      <XAxis dataKey="time" hide />
@@ -233,17 +249,38 @@ export const Studio: React.FC<Props> = ({ data, onRestart, onBattle }) => {
             </div>
 
             {/* AI Feedback */}
-            <div className="bg-surface-800 rounded-lg p-4 border border-surface-700">
-               <h3 className="text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-2">
+            <div className="bg-surface-800 rounded-lg p-4 border border-surface-700 flex flex-col">
+               <h3 className="text-xs font-bold text-slate-400 uppercase mb-3 flex items-center gap-2">
                  <ShieldAlert size={14} className="text-neon-purple" /> AI Coach Feedback
                </h3>
-               <div className="h-full flex flex-col justify-center">
-                  <div className="text-3xl font-bold text-white mb-1">{data.score}<span className="text-sm text-slate-500 font-normal">/100</span></div>
-                  <p className="text-sm text-slate-300 leading-relaxed">
-                    "{data.feedback}"
-                  </p>
-                  <div className="mt-3 text-xs text-neon-purple">
-                    Detected: Early Hip Rotation (Off-beat)
+               <div className="flex-1 flex flex-col justify-start">
+                  <div className="flex items-baseline gap-2 mb-3">
+                    <div className="text-4xl font-bold text-white">{data.score}</div>
+                    <span className="text-sm text-slate-500">/100</span>
+                    <span className={`ml-auto px-2 py-0.5 rounded text-xs font-bold ${
+                      data.score >= 80 ? 'bg-neon-green/20 text-neon-green' :
+                      data.score >= 60 ? 'bg-yellow-500/20 text-yellow-500' :
+                      'bg-red-500/20 text-red-500'
+                    }`}>
+                      {data.score >= 80 ? 'ADVANCED' : data.score >= 60 ? 'INTERMEDIATE' : 'BEGINNER'}
+                    </span>
+                  </div>
+
+                  <div className="space-y-2 text-xs text-slate-300 leading-relaxed">
+                    <p className="font-semibold text-white">Primary Issue:</p>
+                    <p>"{data.feedback}"</p>
+
+                    <p className="font-semibold text-white mt-3">Kinetic Chain Analysis:</p>
+                    <p className="text-neon-purple">⚠ Detected: Early Hip Rotation (Off-beat)</p>
+                    <p>Your hips are firing approximately 80ms before optimal shoulder engagement. This breaks the kinetic chain sequence and reduces power transfer efficiency by ~15-20%.</p>
+
+                    <p className="font-semibold text-white mt-3">Recommendations:</p>
+                    <ul className="list-disc list-inside space-y-1 text-slate-400">
+                      <li>Focus on loading the back leg during preparation phase</li>
+                      <li>Delay hip rotation until shoulder turn initiates</li>
+                      <li>Practice shadow swings at 0.5x speed to develop timing</li>
+                      <li>Aim for 150-200ms gap between hip fire and contact</li>
+                    </ul>
                   </div>
                </div>
             </div>

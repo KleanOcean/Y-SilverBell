@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import { RhythmNode } from '../types';
 import { Footprints, Activity, Move, Zap } from 'lucide-react';
+import { audioService } from '../services/audioService';
 
 interface Props {
   nodes: RhythmNode[];
@@ -11,6 +12,8 @@ interface Props {
 }
 
 export const RhythmVisualizer: React.FC<Props> = ({ nodes, currentTime, duration, isPlaying, compact = false }) => {
+  const playedNodesRef = useRef(new Set<string>());
+
   const tracks = [
     { type: 'KICK', label: 'Legs / Ground', color: 'bg-neon-purple', icon: Footprints },
     { type: 'BASS', label: 'Hips / Core', color: 'bg-blue-500', icon: Activity },
@@ -19,6 +22,27 @@ export const RhythmVisualizer: React.FC<Props> = ({ nodes, currentTime, duration
   ];
 
   const progressPercent = (currentTime / duration) * 100;
+
+  // Play audio when rhythm nodes are hit
+  useEffect(() => {
+    if (!isPlaying) return;
+
+    // Check if any nodes should be played
+    nodes.forEach(node => {
+      const timeDiff = Math.abs(currentTime - node.timestamp);
+
+      // If we're within 50ms of the node and haven't played it yet
+      if (timeDiff < 0.05 && !playedNodesRef.current.has(node.id)) {
+        audioService.playRhythmNode(node.type);
+        playedNodesRef.current.add(node.id);
+      }
+    });
+
+    // Reset played nodes when playback restarts from beginning
+    if (currentTime < 0.1) {
+      playedNodesRef.current.clear();
+    }
+  }, [currentTime, isPlaying, nodes]);
 
   return (
     <div className={`w-full bg-surface-900 border border-surface-700 rounded-xl overflow-hidden relative shadow-2xl ${compact ? 'h-48' : 'h-full'}`}>

@@ -40,12 +40,12 @@ export const RhythmVisualizer: React.FC<Props> = ({ nodes, currentTime, duration
       startTimeRef.current = currentTime;
     }
 
-    // Clear scheduled sounds when paused or restarted from beginning
-    if (!isPlaying || currentTime < startTimeRef.current) {
+    // Clear scheduled sounds when paused
+    if (!isPlaying) {
       audioService.clearScheduledSounds();
       scheduledRef.current = false;
     }
-  }, [isPlaying, currentTime, nodes]);
+  }, [isPlaying, nodes]); // Removed currentTime to prevent update loop
 
   return (
     <div className={`w-full bg-surface-900 border border-surface-700 rounded-xl overflow-hidden relative shadow-2xl ${compact ? 'h-48' : 'h-full'}`}>

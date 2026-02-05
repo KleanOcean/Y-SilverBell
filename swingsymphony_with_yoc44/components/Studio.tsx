@@ -151,29 +151,15 @@ export const Studio: React.FC<Props> = ({ data: initialData, onRestart, onBattle
   const animate = (time: number) => {
     if (!startTimeRef.current) {
       startTimeRef.current = time;
-      console.log('🎬 Animation started, startTime:', time);
     }
 
     // Calculate absolute elapsed time (no accumulation error)
     const elapsedMs = time - startTimeRef.current;
     const elapsedSeconds = elapsedMs / 1000;
-    const newTime = elapsedSeconds * speedRef.current; // Use ref for latest value
-
-    // Debug logging (remove after fix)
-    if (Math.random() < 0.05) { // Log ~5% of frames to avoid spam
-      console.log('⏱️ Time:', {
-        timestamp: time.toFixed(0),
-        startTime: startTimeRef.current?.toFixed(0),
-        elapsedMs: elapsedMs.toFixed(0),
-        speed: speedRef.current,
-        newTime: newTime.toFixed(3),
-        duration: durationRef.current.toFixed(3)
-      });
-    }
+    const newTime = elapsedSeconds * speedRef.current;
 
     // Check if reached end
-    if (newTime >= durationRef.current) { // Use ref for latest value
-      console.log('🏁 Animation ended');
+    if (newTime >= durationRef.current) {
       setCurrentTime(durationRef.current);
       setIsPlaying(false);
       startTimeRef.current = undefined;

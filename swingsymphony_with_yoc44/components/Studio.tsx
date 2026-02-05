@@ -26,6 +26,17 @@ export const Studio: React.FC<Props> = ({ data: initialData, onRestart, onBattle
   const [isLoadingModel, setIsLoadingModel] = useState(false);
   const requestRef = useRef<number>();
   const startTimeRef = useRef<number>();
+  const speedRef = useRef(speed);
+  const durationRef = useRef(data.duration);
+
+  // Update refs when values change
+  useEffect(() => {
+    speedRef.current = speed;
+  }, [speed]);
+
+  useEffect(() => {
+    durationRef.current = data.duration;
+  }, [data.duration]);
 
   const togglePlay = () => {
     setIsPlaying(!isPlaying);
@@ -145,11 +156,11 @@ export const Studio: React.FC<Props> = ({ data: initialData, onRestart, onBattle
     // Calculate absolute elapsed time (no accumulation error)
     const elapsedMs = time - startTimeRef.current;
     const elapsedSeconds = elapsedMs / 1000;
-    const newTime = elapsedSeconds * speed;
+    const newTime = elapsedSeconds * speedRef.current; // Use ref for latest value
 
     // Check if reached end
-    if (newTime >= data.duration) {
-      setCurrentTime(data.duration);
+    if (newTime >= durationRef.current) { // Use ref for latest value
+      setCurrentTime(durationRef.current);
       setIsPlaying(false);
       startTimeRef.current = undefined;
       return;
@@ -170,7 +181,7 @@ export const Studio: React.FC<Props> = ({ data: initialData, onRestart, onBattle
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
-  }, [isPlaying, speed, data.duration]);
+  }, [isPlaying]);
 
   return (
     <div className="flex flex-col h-screen bg-black text-white overflow-hidden">

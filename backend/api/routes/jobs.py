@@ -5,7 +5,7 @@ Handles job status queries and pro data retrieval.
 """
 from typing import Optional
 
-from fastapi import APIRouter, HTTPException, status, Query
+from fastapi import APIRouter, HTTPException, status, Query, Request
 
 from api.models.requests import ProDataRequest
 from api.models.responses import JobStatusResponse, ProDataResponse
@@ -77,6 +77,49 @@ async def wait_for_job(
             )
 
     return job.to_response()
+
+
+@router.get("/models")
+async def list_models(request: Request):
+    """
+    List available model codes.
+
+    Returns list of available 3D skeleton models (T01, T02, etc.)
+    """
+    yoc44_service = request.app.state.yoc44_service
+    models = yoc44_service.get_available_models()
+    return {"models": models, "count": len(models)}
+
+
+@router.get("/models/{model_code}")
+async def get_model_data(model_code: str, request: Request):
+    """
+    Get full swing data for a specific model.
+
+    Returns complete analysis data including 3D pose, rhythm, and metrics.
+    """
+    import uuid
+
+    yoc44_service = request.app.state.yoc44_service
+
+    # Check if model exists
+    metadata = yoc44_service.get_model_metadata(model_code)
+    if metadata is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Model not found: {model_code}"
+        )
+
+    # Generate swing data for this model
+    swing_id = f"model-{model_code.lower()}-{uuid.uuid4().hex[:6]}"
+    result = await yoc44_service.analyze_video(
+        video_path="",
+        swing_id=swing_id,
+        user_type="PRO",
+        model_code=model_code
+    )
+
+    return result
 
 
 @router.get("/pro-data/{video_id}", response_model=ProDataResponse)

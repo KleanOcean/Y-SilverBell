@@ -212,3 +212,34 @@ export async function getQueueStats() {
 
   return response.json();
 }
+
+/**
+ * Get list of available models
+ *
+ * @returns Promise with list of model codes
+ */
+export async function listModels(): Promise<{ models: string[]; count: number }> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/models`);
+
+  if (!response.ok) {
+    throw new Error('Failed to list models');
+  }
+
+  return response.json();
+}
+
+/**
+ * Get swing data for a specific model
+ *
+ * @param modelCode - Model code (T01, T02, etc.)
+ * @returns Promise with complete swing data
+ */
+export async function getModelData(modelCode: string): Promise<SwingData> {
+  const response = await fetch(`${API_BASE_URL}/api/v1/models/${modelCode}`);
+
+  if (!response.ok) {
+    throw new Error(`Failed to get model data for ${modelCode}`);
+  }
+
+  return response.json();
+}

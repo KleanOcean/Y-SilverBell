@@ -37,6 +37,8 @@ export interface SwingData {
   userType: 'USER' | 'PRO';
   videoUrl: string | null;
   duration: number;
+  model_code?: string; // Model code (T01, T02, etc.)
+  hashtag?: string; // Model hashtag
   rhythmTrack: RhythmNode[];
   velocityData: KineticDataPoint[];
   poseData: PoseFrame[]; // Sequence of YOLO 2D pose frames (COCO 17 joints)

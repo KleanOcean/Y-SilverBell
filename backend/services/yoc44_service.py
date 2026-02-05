@@ -69,7 +69,8 @@ class YOC44Service:
         self,
         video_path: str,
         swing_id: str,
-        user_type: str = "USER"
+        user_type: str = "USER",
+        model_code: str = "T01"
     ) -> SwingDataResponse:
         """
         Analyze a tennis swing video and return 3D skeleton data.
@@ -78,6 +79,7 @@ class YOC44Service:
             video_path: Path to the uploaded video file
             swing_id: Unique identifier for this swing
             user_type: "USER" or "PRO"
+            model_code: Model to load (T01, T02, etc.)
 
         Returns:
             SwingDataResponse with complete analysis results
@@ -85,11 +87,11 @@ class YOC44Service:
         # Simulate processing time (in real implementation, this would run YOC44)
         await asyncio.sleep(0.5)
 
-        # Use real T01 data from skeleton_data.json
-        if self._pro_data_cache and "T01" in self._pro_data_cache:
-            return self._build_response_from_real_data(swing_id, video_path, user_type)
+        # Use real data from skeleton_data.json
+        if self._pro_data_cache and model_code in self._pro_data_cache:
+            return self._build_response_from_real_data(swing_id, video_path, user_type, model_code)
         else:
-            # Fallback to mock if T01 data not available
+            # Fallback to mock if model data not available
             return self._generate_mock_swing_data(swing_id, video_path, user_type)
 
     async def get_pro_data(self, video_id: str) -> Optional[dict]:
@@ -105,6 +107,64 @@ class YOC44Service:
         if video_id in self._pro_data_cache:
             return self._pro_data_cache[video_id]
         return None
+
+    def get_available_models(self) -> List[str]:
+        """
+        Get list of available model codes.
+
+        Returns:
+            List of model codes (e.g., ["T01", "T02", ...])
+        """
+        return sorted(list(self._pro_data_cache.keys()))
+
+    def get_model_metadata(self, model_code: str) -> Optional[dict]:
+        """
+        Get metadata for a specific model.
+
+        Args:
+            model_code: Model code like "T01", "T02", etc.
+
+        Returns:
+            Dictionary with model metadata including hashtag
+        """
+        if model_code not in self._pro_data_cache:
+            return None
+
+        model_data = self._pro_data_cache[model_code]
+
+        # Generate hashtags based on model characteristics
+        hashtag = self._generate_hashtag(model_code, model_data)
+
+        return {
+            "code": model_code,
+            "hashtag": hashtag,
+            "frames": model_data["frames"],
+            "fps": model_data["fps"],
+            "impact_frame": model_data["impact_frame"],
+            "duration": model_data["frames"] / model_data["fps"]
+        }
+
+    def _generate_hashtag(self, model_code: str, model_data: dict) -> str:
+        """Generate a descriptive hashtag for the model."""
+        # Generate hashtags based on model characteristics
+        duration = model_data["frames"] / model_data["fps"]
+        impact_ratio = model_data["impact_frame"] / model_data["frames"]
+
+        # Create descriptive hashtags based on swing characteristics
+        hashtags = {
+            "T01": "#PowerServe",
+            "T02": "#FastReturn",
+            "T03": "#BaselineRally",
+            "T04": "#SliceServe",
+            "T05": "#TopspinDrive",
+            "T06": "#VolleyMaster",
+            "T07": "#BackhandSlice",
+            "T08": "#ForehandWinner",
+            "T09": "#DropShot",
+            "T10": "#SmashPoint"
+        }
+
+        return hashtags.get(model_code, f"#Model{model_code}")
 
     def _generate_mock_swing_data(
         self,
@@ -357,19 +417,20 @@ class YOC44Service:
         self,
         swing_id: str,
         video_path: str,
-        user_type: str
+        user_type: str,
+        model_code: str = "T01"
     ) -> SwingDataResponse:
-        """Build response using real T01 data from skeleton_data.json.
+        """Build response using real data from skeleton_data.json.
 
-        Uses actual YOC44 44-joint 3D data from T01, and calculates
+        Uses actual YOC44 44-joint 3D data from the specified model, and calculates
         rhythm/velocity metrics from the pose data.
         """
-        t01_data = self._pro_data_cache["T01"]
+        model_data = self._pro_data_cache[model_code]
 
-        frames = t01_data["frames"]
-        fps = t01_data["fps"]
-        impact_frame = t01_data["impact_frame"]
-        pose_3d_raw = t01_data["pose_3d"]  # List[List[List[float]]] (N, 44, 3)
+        frames = model_data["frames"]
+        fps = model_data["fps"]
+        impact_frame = model_data["impact_frame"]
+        pose_3d_raw = model_data["pose_3d"]  # List[List[List[float]]] (N, 44, 3)
         duration = frames / fps
 
         # Convert raw 3D data to PoseFrame3D format
@@ -399,11 +460,16 @@ class YOC44Service:
         # Generate score and feedback
         score, feedback = self._generate_mock_score_and_feedback(user_type)
 
+        # Get model metadata
+        hashtag = self._generate_hashtag(model_code, model_data)
+
         return SwingDataResponse(
             id=swing_id,
             userType=user_type,
-            videoUrl=None,  # No video file for T01 data
+            videoUrl=None,  # No video file for model data
             duration=duration,
+            model_code=model_code,
+            hashtag=hashtag,
             poseData=pose_data_2d,
             poseData3D=pose_data_3d,
             frames=frames,

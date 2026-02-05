@@ -3,8 +3,9 @@ import { SwingData } from '../types';
 import { RhythmVisualizer } from './RhythmVisualizer';
 import { PoseOverlay } from './PoseOverlay';
 import { Skeleton3DViewer } from './Skeleton3DViewer';
-import { Play, Pause, RefreshCw, BarChart2, Volume2, VolumeX, ShieldAlert, Box } from 'lucide-react';
+import { Play, Pause, RefreshCw, BarChart2, Volume2, VolumeX, ShieldAlert, Box, SkipForward } from 'lucide-react';
 import { audioService } from '../services/audioService';
+import { listModels, getModelData } from '../services/apiService';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 
 interface Props {
@@ -13,12 +14,16 @@ interface Props {
   onBattle: () => void;
 }
 
-export const Studio: React.FC<Props> = ({ data, onRestart, onBattle }) => {
+export const Studio: React.FC<Props> = ({ data: initialData, onRestart, onBattle }) => {
+  const [data, setData] = useState<SwingData>(initialData);
   const [isPlaying, setIsPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [speed, setSpeed] = useState(1);
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('3d');
   const [audioEnabled, setAudioEnabled] = useState(true);
+  const [availableModels, setAvailableModels] = useState<string[]>([]);
+  const [currentModelIndex, setCurrentModelIndex] = useState(0);
+  const [isLoadingModel, setIsLoadingModel] = useState(false);
   const requestRef = useRef<number>();
   const startTimeRef = useRef<number>();
 
@@ -31,6 +36,68 @@ export const Studio: React.FC<Props> = ({ data, onRestart, onBattle }) => {
     setAudioEnabled(newState);
     audioService.setVolume(newState ? 0.3 : 0);
   };
+
+  const restartPlayback = () => {
+    setCurrentTime(0);
+    setIsPlaying(true);
+    startTimeRef.current = undefined;
+  };
+
+  const loadNextModel = async () => {
+    if (availableModels.length === 0 || isLoadingModel) return;
+
+    const nextIndex = (currentModelIndex + 1) % availableModels.length;
+    const nextModelCode = availableModels[nextIndex];
+
+    setIsLoadingModel(true);
+    setIsPlaying(false);
+    setCurrentTime(0);
+
+    try {
+      const modelData = await getModelData(nextModelCode);
+      setData(modelData);
+      setCurrentModelIndex(nextIndex);
+    } catch (error) {
+      console.error('Failed to load model:', error);
+    } finally {
+      setIsLoadingModel(false);
+    }
+  };
+
+  // Load available models on mount
+  useEffect(() => {
+    const loadModels = async () => {
+      try {
+        const { models } = await listModels();
+        setAvailableModels(models);
+
+        // Find current model index
+        if (data.model_code) {
+          const index = models.indexOf(data.model_code);
+          if (index >= 0) {
+            setCurrentModelIndex(index);
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load models:', error);
+      }
+    };
+
+    loadModels();
+  }, []);
+
+  // Handle spacebar for playback control
+  useEffect(() => {
+    const handleKeyPress = (event: KeyboardEvent) => {
+      if (event.code === 'Space' && event.target === document.body) {
+        event.preventDefault();
+        restartPlayback();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyPress);
+    return () => window.removeEventListener('keydown', handleKeyPress);
+  }, []);
 
   const animate = (time: number) => {
     if (!startTimeRef.current) startTimeRef.current = time;
@@ -73,10 +140,22 @@ export const Studio: React.FC<Props> = ({ data, onRestart, onBattle }) => {
            </h1>
         </div>
         <div className="flex gap-4">
+           <button
+             onClick={loadNextModel}
+             disabled={isLoadingModel || availableModels.length <= 1}
+             className="text-slate-400 hover:text-white transition flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+           >
+             <SkipForward size={14} /> Next Model
+             {availableModels.length > 0 && (
+               <span className="text-xs text-slate-600">
+                 ({currentModelIndex + 1}/{availableModels.length})
+               </span>
+             )}
+           </button>
            <button onClick={onRestart} className="text-slate-400 hover:text-white transition flex items-center gap-2 text-sm">
              <RefreshCw size={14} /> New Upload
            </button>
-           <button 
+           <button
              onClick={onBattle}
              className="bg-neon-purple/20 text-neon-purple border border-neon-purple/50 px-4 py-1 rounded-full text-sm font-bold hover:bg-neon-purple hover:text-white transition"
            >
@@ -92,6 +171,22 @@ export const Studio: React.FC<Props> = ({ data, onRestart, onBattle }) => {
         <div className="flex gap-1 h-[400px]">
           {/* Left: 3D Viewer */}
           <div className="w-[400px] bg-surface-900 relative rounded-lg overflow-hidden border border-surface-700 group">
+          {/* Model Info */}
+          {data.model_code && (
+            <div className="absolute top-4 right-4 z-10 bg-black/80 backdrop-blur px-3 py-2 rounded-lg border border-surface-700">
+              <div className="text-right">
+                <div className="text-neon-blue font-bold text-sm tracking-wider">
+                  {data.model_code}
+                </div>
+                {data.hashtag && (
+                  <div className="text-neon-purple text-xs mt-0.5">
+                    {data.hashtag}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* View Mode Toggle */}
           <div className="absolute top-4 left-4 z-10 flex gap-1 bg-black/60 backdrop-blur px-1 py-1 rounded border border-surface-700">
             <button

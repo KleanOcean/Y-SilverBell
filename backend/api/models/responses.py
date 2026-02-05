@@ -86,6 +86,8 @@ class SwingDataResponse(BaseModel):
     userType: Literal["USER", "PRO"] = Field(..., description="User or Pro data")
     videoUrl: Optional[str] = Field(None, description="URL to uploaded video")
     duration: float = Field(..., gt=0, description="Duration in seconds")
+    model_code: Optional[str] = Field(None, description="Model code (T01, T02, etc.)")
+    hashtag: Optional[str] = Field(None, description="Model hashtag")
 
     # 2D COCO format (17 joints) - for backward compatibility
     poseData: List[PoseFrame2D] = Field(

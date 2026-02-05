@@ -56,7 +56,7 @@ class AudioService {
     // Clear previously scheduled sounds
     this.clearScheduledSounds();
 
-    const audioStartTime = this.audioContext.currentTime + 0.05; // 50ms buffer
+    const audioStartTime = this.audioContext.currentTime + 0.02; // 20ms buffer for better sync perception
 
     sounds.forEach(sound => {
       const audioTime = audioStartTime + (sound.time - startTime);

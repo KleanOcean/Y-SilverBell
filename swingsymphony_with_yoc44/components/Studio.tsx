@@ -8,6 +8,25 @@ import { audioService } from '../services/audioService';
 import { listModels, getModelData } from '../services/apiService';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
 
+// DEBUG: Extensive logging for playhead synchronization
+const DEBUG_STUDIO_PLAYHEAD = true;
+let studioDebugLogCount = 0;
+const MAX_STUDIO_DEBUG_LOGS = 100;
+
+const studioDebugLog = (message: string, data?: any) => {
+  if (!DEBUG_STUDIO_PLAYHEAD) return;
+  if (studioDebugLogCount >= MAX_STUDIO_DEBUG_LOGS) {
+    if (studioDebugLogCount === MAX_STUDIO_DEBUG_LOGS) {
+      console.warn('[Studio DEBUG] Max log count reached, stopping logs');
+      studioDebugLogCount++;
+    }
+    return;
+  }
+  studioDebugLogCount++;
+  const timestamp = performance.now().toFixed(2);
+  console.log(`[Studio DEBUG ${timestamp}ms] ${message}`, data !== undefined ? data : '');
+};
+
 interface Props {
   data: SwingData;
   onRestart: () => void;
@@ -28,6 +47,12 @@ export const Studio: React.FC<Props> = ({ data: initialData, onRestart, onBattle
   const startTimeRef = useRef<number>();
   const speedRef = useRef(speed);
   const durationRef = useRef(data.duration);
+
+  // DEBUG: Refs for measuring playhead positions
+  const graphContainerRef = useRef<HTMLDivElement>(null);
+  const graphPlayheadRef = useRef<HTMLDivElement>(null);
+  const renderCountRef = useRef(0);
+  renderCountRef.current++;
 
   // Update refs when values change
   useEffect(() => {
@@ -151,6 +176,11 @@ export const Studio: React.FC<Props> = ({ data: initialData, onRestart, onBattle
   const animate = (time: number) => {
     if (!startTimeRef.current) {
       startTimeRef.current = time;
+      studioDebugLog('ANIMATION START', {
+        startTime: time.toFixed(2),
+        speedRef: speedRef.current,
+        durationRef: durationRef.current,
+      });
     }
 
     // Calculate absolute elapsed time (no accumulation error)
@@ -158,8 +188,25 @@ export const Studio: React.FC<Props> = ({ data: initialData, onRestart, onBattle
     const elapsedSeconds = elapsedMs / 1000;
     const newTime = elapsedSeconds * speedRef.current;
 
+    // DEBUG: Log animation frame details (every 30 frames to reduce spam)
+    if (Math.floor(elapsedMs / 500) !== Math.floor((elapsedMs - 16.67) / 500)) {
+      studioDebugLog('ANIMATION FRAME', {
+        rafTime: time.toFixed(2),
+        elapsedMs: elapsedMs.toFixed(2),
+        elapsedSeconds: elapsedSeconds.toFixed(4),
+        newTime: newTime.toFixed(4),
+        speed: speedRef.current,
+        duration: durationRef.current,
+        progressPercent: ((newTime / durationRef.current) * 100).toFixed(4) + '%',
+      });
+    }
+
     // Check if reached end
     if (newTime >= durationRef.current) {
+      studioDebugLog('ANIMATION END - Reached duration', {
+        newTime: newTime.toFixed(4),
+        duration: durationRef.current,
+      });
       setCurrentTime(durationRef.current);
       setIsPlaying(false);
       startTimeRef.current = undefined;
@@ -171,17 +218,89 @@ export const Studio: React.FC<Props> = ({ data: initialData, onRestart, onBattle
   };
 
   useEffect(() => {
+    studioDebugLog('PLAY STATE CHANGE', {
+      isPlaying,
+      currentTime: currentTime.toFixed(4),
+      startTimeRef: startTimeRef.current,
+    });
+
     if (isPlaying) {
       startTimeRef.current = undefined; // Reset start time for new playback
       requestRef.current = requestAnimationFrame(animate);
+      studioDebugLog('STARTING ANIMATION LOOP');
     } else {
-      if (requestRef.current) cancelAnimationFrame(requestRef.current);
+      if (requestRef.current) {
+        cancelAnimationFrame(requestRef.current);
+        studioDebugLog('CANCELLED ANIMATION FRAME');
+      }
       startTimeRef.current = undefined;
     }
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
   }, [isPlaying]);
+
+  // DEBUG: Measure and compare playhead positions
+  useEffect(() => {
+    if (graphContainerRef.current && graphPlayheadRef.current) {
+      const containerRect = graphContainerRef.current.getBoundingClientRect();
+      const playheadRect = graphPlayheadRef.current.getBoundingClientRect();
+
+      // Get computed styles to check padding
+      const containerStyles = window.getComputedStyle(graphContainerRef.current);
+      const paddingLeft = parseFloat(containerStyles.paddingLeft);
+      const paddingRight = parseFloat(containerStyles.paddingRight);
+
+      const expectedPercent = (currentTime / data.duration) * 100;
+      const expectedPixelLeft = (expectedPercent / 100) * containerRect.width;
+      const actualPixelLeft = playheadRect.left - containerRect.left;
+
+      // The chart content area (excluding padding)
+      const contentWidth = containerRect.width - paddingLeft - paddingRight;
+      const chartBasedPixelLeft = paddingLeft + (expectedPercent / 100) * contentWidth;
+
+      studioDebugLog('GRAPH PLAYHEAD POSITION ANALYSIS', {
+        currentTime: currentTime.toFixed(4),
+        duration: data.duration,
+        expectedPercent: expectedPercent.toFixed(4) + '%',
+        containerWidth: containerRect.width,
+        paddingLeft,
+        paddingRight,
+        contentWidth,
+        '--- MISMATCH DETECTION ---': '',
+        'playhead left (container %)': expectedPixelLeft.toFixed(2),
+        'playhead left (should be)': chartBasedPixelLeft.toFixed(2),
+        actualPixelLeft: actualPixelLeft.toFixed(2),
+        'POSITION ERROR': (actualPixelLeft - chartBasedPixelLeft).toFixed(2) + 'px',
+        'ERROR CAUSE': paddingLeft > 0 ? `Playhead uses container %, but chart is offset by ${paddingLeft}px padding!` : 'No padding issue detected',
+      });
+    }
+  }, [currentTime, data.duration]);
+
+  // DEBUG: One-time layout analysis
+  useEffect(() => {
+    studioDebugLog('=== LAYOUT ANALYSIS ON MOUNT ===');
+
+    const analyzeLayout = () => {
+      if (graphContainerRef.current) {
+        const containerStyles = window.getComputedStyle(graphContainerRef.current);
+        const containerRect = graphContainerRef.current.getBoundingClientRect();
+
+        studioDebugLog('GRAPH CONTAINER LAYOUT', {
+          width: containerRect.width,
+          paddingLeft: containerStyles.paddingLeft,
+          paddingRight: containerStyles.paddingRight,
+          paddingTop: containerStyles.paddingTop,
+          paddingBottom: containerStyles.paddingBottom,
+          position: containerStyles.position,
+          'ISSUE': 'Playhead uses left:X% of container. But chart is INSIDE padding. So playhead at 0% = left edge of padding, but chart starts AFTER padding!',
+        });
+      }
+    };
+
+    // Wait for render
+    setTimeout(analyzeLayout, 100);
+  }, []);
 
   return (
     <div className="flex flex-col h-screen bg-black text-white overflow-hidden">
@@ -394,7 +513,10 @@ export const Studio: React.FC<Props> = ({ data: initialData, onRestart, onBattle
         <div className="flex-1 grid grid-cols-2 gap-1">
             
             {/* Smoothness/Jerk Graph */}
-            <div className="bg-surface-800 rounded-lg p-4 border border-surface-700 relative flex flex-col">
+            <div
+              ref={graphContainerRef}
+              className="bg-surface-800 rounded-lg p-4 border border-surface-700 relative flex flex-col"
+            >
                <h3 className="text-xs font-bold text-slate-400 uppercase mb-2 flex items-center gap-2">
                  <BarChart2 size={14} /> Motion Smoothness (Inv. Jerk)
                </h3>
@@ -403,25 +525,57 @@ export const Studio: React.FC<Props> = ({ data: initialData, onRestart, onBattle
                    <LineChart data={data.velocityData}>
                      <XAxis dataKey="time" hide />
                      <YAxis hide />
-                     <Tooltip 
+                     <Tooltip
                        contentStyle={{ backgroundColor: '#1e293b', border: 'none', color: '#fff' }}
                        itemStyle={{ color: '#0aff60' }}
                      />
-                     <Line 
-                       type="monotone" 
-                       dataKey="jerk" 
-                       stroke="#0aff60" 
-                       strokeWidth={2} 
-                       dot={false} 
+                     <Line
+                       type="monotone"
+                       dataKey="jerk"
+                       stroke="#0aff60"
+                       strokeWidth={2}
+                       dot={false}
                      />
                    </LineChart>
                  </ResponsiveContainer>
                </div>
                {/* Current Time Indicator on Graph */}
-               <div 
-                  className="absolute top-10 bottom-4 w-px bg-white/20 pointer-events-none"
+               <div
+                  ref={graphPlayheadRef}
+                  className="absolute top-10 bottom-4 w-0.5 bg-red-500 pointer-events-none z-30 shadow-[0_0_10px_rgba(239,68,68,0.8)]"
                   style={{ left: `${(currentTime / data.duration) * 100}%` }}
+                  data-debug-progress={(currentTime / data.duration * 100).toFixed(4)}
+                  data-debug-current-time={currentTime.toFixed(4)}
                />
+
+               {/* DEBUG: Info overlay for graph playhead */}
+               {DEBUG_STUDIO_PLAYHEAD && (
+                 <div className="absolute top-2 left-2 bg-black/80 text-xs text-white font-mono p-2 rounded z-50">
+                   <div className="text-cyan-400">GRAPH PLAYHEAD DEBUG</div>
+                   <div>Time: {currentTime.toFixed(3)}s</div>
+                   <div>Progress: {((currentTime / data.duration) * 100).toFixed(2)}%</div>
+                   <div>Render: #{renderCountRef.current}</div>
+                   <div className="text-yellow-400 mt-1">⚠ p-4 padding = 16px offset!</div>
+                 </div>
+               )}
+
+               {/* DEBUG: Visual markers for padding boundaries */}
+               {DEBUG_STUDIO_PLAYHEAD && (
+                 <>
+                   {/* Left padding boundary marker */}
+                   <div
+                     className="absolute top-0 bottom-0 w-0.5 bg-yellow-500/50 z-40"
+                     style={{ left: '16px' }}
+                     title="DEBUG: Left padding boundary (16px)"
+                   />
+                   {/* Right padding boundary marker */}
+                   <div
+                     className="absolute top-0 bottom-0 w-0.5 bg-yellow-500/50 z-40"
+                     style={{ right: '16px' }}
+                     title="DEBUG: Right padding boundary (16px)"
+                   />
+                 </>
+               )}
             </div>
 
             {/* AI Feedback */}

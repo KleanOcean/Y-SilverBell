@@ -3,7 +3,7 @@ import { SwingData } from '../types';
 import { RhythmVisualizer } from './RhythmVisualizer';
 import { PoseOverlay } from './PoseOverlay';
 import { Skeleton3DViewer } from './Skeleton3DViewer';
-import { Play, Pause, RefreshCw, BarChart2, Volume2, VolumeX, ShieldAlert, Box, SkipForward } from 'lucide-react';
+import { Play, Pause, RefreshCw, BarChart2, Volume2, VolumeX, ShieldAlert, Box, SkipForward, SkipBack } from 'lucide-react';
 import { audioService } from '../services/audioService';
 import { listModels, getModelData } from '../services/apiService';
 import { LineChart, Line, ResponsiveContainer, XAxis, YAxis, Tooltip } from 'recharts';
@@ -51,16 +51,29 @@ export const Studio: React.FC<Props> = ({ data: initialData, onRestart, onBattle
     if (availableModels.length === 0 || isLoadingModel) return;
 
     const nextIndex = (currentModelIndex + 1) % availableModels.length;
-    const nextModelCode = availableModels[nextIndex];
+    await loadModelByIndex(nextIndex);
+  };
+
+  const loadPreviousModel = async () => {
+    if (availableModels.length === 0 || isLoadingModel) return;
+
+    const prevIndex = (currentModelIndex - 1 + availableModels.length) % availableModels.length;
+    await loadModelByIndex(prevIndex);
+  };
+
+  const loadModelByIndex = async (index: number) => {
+    if (availableModels.length === 0 || isLoadingModel) return;
+
+    const modelCode = availableModels[index];
 
     setIsLoadingModel(true);
     setIsPlaying(false);
     setCurrentTime(0);
 
     try {
-      const modelData = await getModelData(nextModelCode);
+      const modelData = await getModelData(modelCode);
       setData(modelData);
-      setCurrentModelIndex(nextIndex);
+      setCurrentModelIndex(index);
     } catch (error) {
       console.error('Failed to load model:', error);
     } finally {
@@ -96,18 +109,33 @@ export const Studio: React.FC<Props> = ({ data: initialData, onRestart, onBattle
     loadModels();
   }, []);
 
-  // Handle spacebar for playback control
+  // Handle keyboard controls
   useEffect(() => {
     const handleKeyPress = (event: KeyboardEvent) => {
-      if (event.code === 'Space' && event.target === document.body) {
-        event.preventDefault();
-        restartPlayback();
+      // Only handle if target is body (not input fields)
+      if (event.target !== document.body) return;
+
+      switch (event.code) {
+        case 'Space':
+          event.preventDefault();
+          restartPlayback();
+          break;
+
+        case 'ArrowRight':
+          event.preventDefault();
+          loadNextModel();
+          break;
+
+        case 'ArrowLeft':
+          event.preventDefault();
+          loadPreviousModel();
+          break;
       }
     };
 
     window.addEventListener('keydown', handleKeyPress);
     return () => window.removeEventListener('keydown', handleKeyPress);
-  }, []);
+  }, [availableModels, currentModelIndex, isLoadingModel]);
 
   const animate = (time: number) => {
     if (!startTimeRef.current) startTimeRef.current = time;
@@ -151,11 +179,20 @@ export const Studio: React.FC<Props> = ({ data: initialData, onRestart, onBattle
         </div>
         <div className="flex gap-4">
            <button
+             onClick={loadPreviousModel}
+             disabled={isLoadingModel || availableModels.length <= 1}
+             className="text-slate-400 hover:text-white transition flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+             title="Previous Model (←)"
+           >
+             <SkipBack size={14} /> Prev
+           </button>
+           <button
              onClick={loadNextModel}
              disabled={isLoadingModel || availableModels.length <= 1}
              className="text-slate-400 hover:text-white transition flex items-center gap-2 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+             title="Next Model (→)"
            >
-             <SkipForward size={14} /> Next Model
+             <SkipForward size={14} /> Next
              {availableModels.length > 0 && (
                <span className="text-xs text-slate-600">
                  ({currentModelIndex + 1}/{availableModels.length})

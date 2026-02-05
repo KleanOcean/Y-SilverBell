@@ -138,14 +138,18 @@ export const Studio: React.FC<Props> = ({ data: initialData, onRestart, onBattle
   }, [availableModels, currentModelIndex, isLoadingModel]);
 
   const animate = (time: number) => {
-    if (!startTimeRef.current) startTimeRef.current = time;
-    const progress = (time - startTimeRef.current) / 1000 * speed; // speed multiplier
-    
-    // Loop
-    const newTime = (currentTime + (progress * 0.05)); // rough simulation step
-    
+    if (!startTimeRef.current) {
+      startTimeRef.current = time;
+    }
+
+    // Calculate absolute elapsed time (no accumulation error)
+    const elapsedMs = time - startTimeRef.current;
+    const elapsedSeconds = elapsedMs / 1000;
+    const newTime = elapsedSeconds * speed;
+
+    // Check if reached end
     if (newTime >= data.duration) {
-      setCurrentTime(0);
+      setCurrentTime(data.duration);
       setIsPlaying(false);
       startTimeRef.current = undefined;
       return;
@@ -157,6 +161,7 @@ export const Studio: React.FC<Props> = ({ data: initialData, onRestart, onBattle
 
   useEffect(() => {
     if (isPlaying) {
+      startTimeRef.current = undefined; // Reset start time for new playback
       requestRef.current = requestAnimationFrame(animate);
     } else {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
@@ -165,7 +170,7 @@ export const Studio: React.FC<Props> = ({ data: initialData, onRestart, onBattle
     return () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
-  }, [isPlaying, currentTime]);
+  }, [isPlaying, speed, data.duration]);
 
   return (
     <div className="flex flex-col h-screen bg-black text-white overflow-hidden">

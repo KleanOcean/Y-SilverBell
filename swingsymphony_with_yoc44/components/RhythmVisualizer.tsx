@@ -12,7 +12,8 @@ interface Props {
 }
 
 export const RhythmVisualizer: React.FC<Props> = ({ nodes, currentTime, duration, isPlaying, compact = false }) => {
-  const playedNodesRef = useRef(new Set<string>());
+  const scheduledRef = useRef(false);
+  const startTimeRef = useRef(0);
 
   const tracks = [
     { type: 'KICK', label: 'Legs / Ground', color: 'bg-neon-purple', icon: Footprints },
@@ -23,26 +24,28 @@ export const RhythmVisualizer: React.FC<Props> = ({ nodes, currentTime, duration
 
   const progressPercent = (currentTime / duration) * 100;
 
-  // Play audio when rhythm nodes are hit
+  // Schedule audio with precise Web Audio API timing
   useEffect(() => {
-    if (!isPlaying) return;
+    if (isPlaying && !scheduledRef.current) {
+      // Schedule all sounds when playback starts
+      const scheduledSounds = nodes.map(node => ({
+        id: node.id,
+        type: node.type,
+        time: node.timestamp,
+        intensity: node.intensity || 0.7 // Use node intensity or default
+      }));
 
-    // Check if any nodes should be played
-    nodes.forEach(node => {
-      const timeDiff = Math.abs(currentTime - node.timestamp);
-
-      // If we're within 50ms of the node and haven't played it yet
-      if (timeDiff < 0.05 && !playedNodesRef.current.has(node.id)) {
-        audioService.playRhythmNode(node.type);
-        playedNodesRef.current.add(node.id);
-      }
-    });
-
-    // Reset played nodes when playback restarts from beginning
-    if (currentTime < 0.1) {
-      playedNodesRef.current.clear();
+      audioService.scheduleSounds(scheduledSounds, currentTime);
+      scheduledRef.current = true;
+      startTimeRef.current = currentTime;
     }
-  }, [currentTime, isPlaying, nodes]);
+
+    // Clear scheduled sounds when paused or restarted from beginning
+    if (!isPlaying || currentTime < startTimeRef.current) {
+      audioService.clearScheduledSounds();
+      scheduledRef.current = false;
+    }
+  }, [isPlaying, currentTime, nodes]);
 
   return (
     <div className={`w-full bg-surface-900 border border-surface-700 rounded-xl overflow-hidden relative shadow-2xl ${compact ? 'h-48' : 'h-full'}`}>

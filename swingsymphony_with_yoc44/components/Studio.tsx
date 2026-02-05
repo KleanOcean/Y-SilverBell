@@ -20,7 +20,7 @@ export const Studio: React.FC<Props> = ({ data: initialData, onRestart, onBattle
   const [currentTime, setCurrentTime] = useState(0);
   const [speed, setSpeed] = useState(1);
   const [viewMode, setViewMode] = useState<'2d' | '3d'>('3d');
-  const [audioEnabled, setAudioEnabled] = useState(true);
+  const [volume, setVolume] = useState(30); // Volume 0-100%
   const [availableModels, setAvailableModels] = useState<string[]>([]);
   const [currentModelIndex, setCurrentModelIndex] = useState(0);
   const [isLoadingModel, setIsLoadingModel] = useState(false);
@@ -31,10 +31,14 @@ export const Studio: React.FC<Props> = ({ data: initialData, onRestart, onBattle
     setIsPlaying(!isPlaying);
   };
 
-  const toggleAudio = () => {
-    const newState = !audioEnabled;
-    setAudioEnabled(newState);
-    audioService.setVolume(newState ? 0.3 : 0);
+  const handleVolumeChange = (newVolume: number) => {
+    setVolume(newVolume);
+    audioService.setVolume(newVolume / 100); // Convert to 0-1 range
+  };
+
+  const handleSpeedChange = (newSpeed: number) => {
+    setSpeed(newSpeed);
+    audioService.setSpeed(newSpeed); // Update audio service speed for pitch shift
   };
 
   const restartPlayback = () => {
@@ -63,6 +67,12 @@ export const Studio: React.FC<Props> = ({ data: initialData, onRestart, onBattle
       setIsLoadingModel(false);
     }
   };
+
+  // Initialize audio service settings on mount
+  useEffect(() => {
+    audioService.setVolume(volume / 100);
+    audioService.setSpeed(speed);
+  }, []);
 
   // Load available models on mount
   useEffect(() => {
@@ -278,18 +288,36 @@ export const Studio: React.FC<Props> = ({ data: initialData, onRestart, onBattle
                   {isPlaying ? <Pause size={20} /> : <Play size={20} />}
                 </button>
                 <div className="h-4 w-[1px] bg-surface-700 mx-1"></div>
-                <button
-                  onClick={toggleAudio}
-                  className={`p-2 transition ${audioEnabled ? 'text-neon-blue hover:text-neon-green' : 'text-slate-600 hover:text-slate-400'}`}
-                  title={audioEnabled ? 'Mute Audio' : 'Enable Audio'}
-                >
-                  {audioEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
-                </button>
+
+                {/* Volume Slider */}
+                <div className="flex items-center gap-2 px-2">
+                  <button
+                    onClick={() => handleVolumeChange(volume > 0 ? 0 : 30)}
+                    className="p-1 hover:text-neon-blue transition"
+                    title={volume > 0 ? 'Mute' : 'Unmute'}
+                  >
+                    {volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
+                  </button>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    step="5"
+                    value={volume}
+                    onChange={(e) => handleVolumeChange(Number(e.target.value))}
+                    className="w-20 h-1 bg-surface-700 rounded-lg appearance-none cursor-pointer accent-neon-blue"
+                    title={`Volume: ${volume}%`}
+                  />
+                  <span className="text-xs text-slate-500 font-mono w-8 text-right">
+                    {volume}%
+                  </span>
+                </div>
+
                 <div className="h-4 w-[1px] bg-surface-700 mx-1"></div>
-                <select 
+                <select
                   className="bg-transparent text-xs font-mono outline-none text-slate-400"
                   value={speed}
-                  onChange={(e) => setSpeed(Number(e.target.value))}
+                  onChange={(e) => handleSpeedChange(Number(e.target.value))}
                 >
                   <option value={1}>1.0x Speed</option>
                   <option value={0.5}>0.5x Slow</option>
